@@ -7,7 +7,7 @@ project(bwi_grasp)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS
+find_package(catkin REQUIRED COMPONENTS roscpp rospy std_msgs message_generation)
     roscpp
     rospy
     std_msgs
@@ -60,11 +60,11 @@ find_package(PCL 1.7 REQUIRED)
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-# add_message_files(
-#   FILES
-#   Message1.msg
-#   Message2.msg
-# )
+ add_message_files(
+   FILES
+   GraspWithScoreList.msg
+   GraspWithScore.msg
+ )
 
 ## Generate services in the 'srv' folder
 # add_service_files(
@@ -81,10 +81,11 @@ find_package(PCL 1.7 REQUIRED)
 # )
 
 ## Generate added messages and services with any dependencies listed here
-# generate_messages(
-#   DEPENDENCIES
-#   std_msgs  # Or other packages containing msgs
-# )
+   generate_messages(
+   DEPENDENCIES
+   std_msgs
+   geometry_msgs
+  )
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -119,7 +120,8 @@ catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES bwi_grasp
 #  CATKIN_DEPENDS other_catkin_pkg
-  DEPENDS segbot_arm_perception
+CATKIN_DEPENDS message_runtime
+DEPENDS segbot_arm_perception
 )
 
 ###########
@@ -140,6 +142,10 @@ link_directories(
 add_definitions(
     ${PCL_DEFINITIONS}
 )
+
+add_executable(convert_grasp src/convert_grasp.cpp)
+add_dependencies(convert_grasp ${catkin_EXPORTED_TARGETS})
+target_link_libraries(convert_grasp ${catkin_LIBRARIES})
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}

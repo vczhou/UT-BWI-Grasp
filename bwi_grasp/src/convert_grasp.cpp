@@ -8,6 +8,7 @@ ros::Publisher grasp_pub;
 
 void grasp_cb(const gpd::GraspConfigList::ConstPtr& gpd_grasps) {
     bwi_grasp::GraspWithScoreList grasps;
+    grasps.header = gpd_grasps.header;
     grasps.grasps.resize(gpd_grasps->grasps.size());
     for (int i=0; i < gpd_grasps->grasps.size(); i++) {
         grasps.grasps[i].approach = gpd_grasps->grasps[i].approach;

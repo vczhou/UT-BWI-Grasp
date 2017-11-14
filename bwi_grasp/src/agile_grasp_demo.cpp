@@ -261,7 +261,7 @@ Eigen::Matrix3d reorderHandAxes(const Eigen::Matrix3d& Q)
 	return R;
 }
 
-geometry_msgs::PoseStamped graspToPose(agile_grasp::Grasp grasp, double hand_offset, std::string frame_id){
+geometry_msgs::PoseStamped graspToPose(bwi_grasp::GraspWithScore grasp, double hand_offset, std::string frame_id){
 	
 	Eigen::Vector3d center_; // grasp position
 	Eigen::Vector3d surface_center_; //  grasp position projected back onto the surface of the object
@@ -518,7 +518,7 @@ void lift(ros::NodeHandle n, double x){
 
 int main(int argc, char **argv) {
 	// Intialize ROS with this node name
-	ros::init(argc, argv, "agile_grasp_demo");
+	ros::init(argc, argv, "gpd_grasp_demo");
 	
 	ros::NodeHandle n;
 
@@ -707,21 +707,21 @@ int main(int argc, char **argv) {
 	}*/
 
 	// pick the grasp with the highest score
-	if (grasps_commands.size() == 0) {
+	if (grasp_commands.size() == 0) {
 		ROS_WARN("No feasible grasps founds, aborting.");
 		return 0;
 	}
 
 	// always pick first element in array because this will have highest score
-	int min_diff_index = 0;
-
-	if (min_diff_index == -1){
-		ROS_WARN("No feasible grasps found, aborting.");
-		return 0;
+	int max_score_index = 0;
+	double max_score = 0;
+	for (int i = 0; i < grasp_commands.size(); i++) {
+		if (grasp_commands.at(i).score > max_score) {
+			max_score_index = i;
+			max_score = grasp_commands.at(i).score;
+		}
 	}
-	else {
-		ROS_INFO("Picking grasp %i...",min_diff_index);
-	}
+	ROS_INFO("Picking grasp %i with score %f...",max_score_index, max_score);
 
 	pose_array_pub.publish(poses_msg);
 
