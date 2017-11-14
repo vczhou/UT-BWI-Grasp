@@ -27,8 +27,7 @@
 #include "kinova_msgs/ArmJointAnglesAction.h"
 
 
-
-#include "agile_grasp/Grasps.h"
+//#include "agile_grasp/Grasps.h"
 
 //srv for talking to table_object_detection_node.cpp
 #include "segbot_arm_perception/TabletopPerception.h"
@@ -137,8 +136,8 @@ ros::Publisher pose_fk_pub;
 sensor_msgs::PointCloud2 cloud_ros;
 
 bool heardGrasps = false;
-agile_grasp::Grasps current_grasps;
-
+//agile_grasp::Grasps current_grasps; //change to new message type
+bwi_grasp::GraspWithScoreList current_grasps;
 
 struct GraspCartesianCommand {
 	sensor_msgs::JointState approach_q;
@@ -147,7 +146,8 @@ struct GraspCartesianCommand {
 	sensor_msgs::JointState grasp_q;
 	geometry_msgs::PoseStamped grasp_pose;
 	
-	
+	// stores the score assigned by gpd to that grasp
+	std_msgs::Float32 score;	
 };
 
 
@@ -183,7 +183,7 @@ void fingers_cb (const kinova_msgs::FingerPosition msg) {
   current_finger = msg;
 }
 
-void grasps_cb(const agile_grasp::Grasps &msg){
+void grasps_cb(const bwi_grasp::GraspsWithScoreList &msg){
 	current_grasps = msg;
 	
 	heardGrasps = true;
@@ -532,8 +532,10 @@ int main(int argc, char **argv) {
 	ros::Subscriber sub_finger = n.subscribe("/m1n6s200_driver/out/finger_position", 1, fingers_cb);
 	  
 	//subscriber for grasps
-	ros::Subscriber sub_grasps = n.subscribe("/find_grasps/grasps_handles",1, grasps_cb);  
-	  
+	//change to our topic
+	//ros::Subscriber sub_grasps = n.subscribe("/find_grasps/grasps_handles",1, grasps_cb);  
+	ros::Subscriber sub_grasps = n.subscribe("/bwi_grasp/grasps",1, grasps_cb);  
+ 
 	//publish velocities
 	pub_velocity = n.advertise<kinova_msgs::PoseVelocity>("/m1n6s200_driver/in/cartesian_velocity", 10);
 	
@@ -572,7 +574,8 @@ int main(int argc, char **argv) {
 
 	segbot_arm_manipulation::openHand();
 	
-	segbot_arm_perception::TabletopPerception::Response table_scene = segbot_arm_manipulation::getTabletopScene(n);
+	// gpd will do its own picking up which object to pick up using RGBD image data
+	/*segbot_arm_perception::TabletopPerception::Response table_scene = segbot_arm_manipulation::getTabletopScene(n);
 	
 	
 	//step 2: extract the data from the response
@@ -604,8 +607,9 @@ int main(int argc, char **argv) {
 	
 	//publish to agile_grasp
 	ROS_INFO("Publishing point cloud...");
-	cloud_grasp_pub.publish(cloud_ros);
+	cloud_grasp_pub.publish(cloud_ros);*/
 	
+	// listen to our node instead of agile grasp
 	//wait for response at 30 Hz
 	listenForGrasps(30.0);
 	
@@ -626,7 +630,7 @@ int main(int argc, char **argv) {
 	
 	std::vector<GraspCartesianCommand> grasp_commands;
 	std::vector<geometry_msgs::PoseStamped> poses;
-	for (unsigned int i = 0; i < current_grasps.grasps.size(); i++){
+	for (unsigned int i = 0; i < current_grasps.grasps.size(); i++) {
 		geometry_msgs::PoseStamped p_grasp_i = graspToPose(current_grasps.grasps.at(i),hand_offset_grasp,cloud_ros.header.frame_id);
 		geometry_msgs::PoseStamped p_approach_i = graspToPose(current_grasps.grasps.at(i),hand_offset_approach,cloud_ros.header.frame_id);
 		
@@ -666,7 +670,10 @@ int main(int argc, char **argv) {
 						//store the IK results
 						gc_i.approach_q = ik_response_approach.solution.joint_state;
 						gc_i.grasp_q = ik_response_grasp.solution.joint_state;
-						
+					
+						//add score
+						gc_i.score = current_grasps.grasps.at(i).score;
+								
 						grasp_commands.push_back(gc_i);
 						poses.push_back(p_grasp_i);
 						poses_msg.poses.push_back(gc_i.approach_pose.pose);
@@ -685,8 +692,8 @@ int main(int argc, char **argv) {
 	//now, select the target grasp
 	updateFK(n);
 	
-	//find the grasp with closest orientatino to current pose
-	double min_diff = 1000000.0;
+	//find the grasp with closest orientation to current pose
+	/*double min_diff = 1000000.0;
 	int min_diff_index = -1;
 	
 	for (unsigned int i = 0; i < grasp_commands.size(); i++){
@@ -697,7 +704,16 @@ int main(int argc, char **argv) {
 			min_diff_index = (int)i;
 			min_diff = d_i;
 		}
+	}*/
+
+	// pick the grasp with the highest score
+	if (grasps_commands.size() == 0) {
+		ROS_WARN("No feasible grasps founds, aborting.");
+		return 0;
 	}
+
+	// always pick first element in array because this will have highest score
+	int min_diff_index = 0;
 
 	if (min_diff_index == -1){
 		ROS_WARN("No feasible grasps found, aborting.");
