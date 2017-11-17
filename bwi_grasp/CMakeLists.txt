@@ -7,7 +7,7 @@ project(bwi_grasp)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS roscpp rospy std_msgs message_generation)
+find_package(catkin REQUIRED COMPONENTS 
     roscpp
     rospy
     std_msgs
@@ -28,6 +28,18 @@ find_package(catkin REQUIRED COMPONENTS roscpp rospy std_msgs message_generation
 
 ## System dependencies are found with CMake's conventions
 find_package(PCL 1.7 REQUIRED)
+
+include_directories(
+    ${PCL_INCLUDE_DIRS}
+)
+
+link_directories(
+    ${PCL_LIBRARY_DIRS}
+)
+
+add_definitions(
+    ${PCL_DEFINITIONS}
+)
 
 
 ## Uncomment this if the package has a setup.py. This macro ensures
@@ -120,8 +132,18 @@ catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES bwi_grasp
 #  CATKIN_DEPENDS other_catkin_pkg
-CATKIN_DEPENDS message_runtime
-DEPENDS segbot_arm_perception
+#CATKIN_DEPENDS 
+#    message_runtime 
+#    tf 
+#    tf_conversions
+#    geometry_msgs
+#    roscpp
+#    std_msgs
+#    eigen_conversions
+DEPENDS 
+    segbot_arm_perception 
+#    PCL
+#    Eigen
 )
 
 ###########
@@ -131,21 +153,16 @@ DEPENDS segbot_arm_perception
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-    ${catkin_INCLUDE_DIRS}
-    ${PCL_INCLUDE_DIRS}
-)
-
-link_directories(
-    ${PCL_LIBRARY_DIRS}
-)
-
-add_definitions(
-    ${PCL_DEFINITIONS}
+	${catkin_INCLUDE_DIRS}
 )
 
 add_executable(convert_grasp src/convert_grasp.cpp)
 add_dependencies(convert_grasp ${catkin_EXPORTED_TARGETS})
 target_link_libraries(convert_grasp ${catkin_LIBRARIES})
+
+add_executable(bwi_grasp_node src/bwi_grasp_gpd.cpp)
+add_dependencies(bwi_grasp_node ${catkin_EXPORTED_TARGETS})
+target_link_libraries(bwi_grasp_node ${catkin_LIBRARIES})
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
