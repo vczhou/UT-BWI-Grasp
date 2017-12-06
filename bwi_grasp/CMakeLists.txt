@@ -86,11 +86,10 @@ add_definitions(
 # )
 
 ## Generate actions in the 'action' folder
-# add_action_files(
-#   FILES
-#   Action1.action
-#   Action2.action
-# )
+ add_action_files(
+   FILES
+   GpdGrasp.action
+ )
 
 ## Generate added messages and services with any dependencies listed here
    generate_messages(
@@ -163,6 +162,10 @@ target_link_libraries(convert_grasp ${catkin_LIBRARIES})
 add_executable(bwi_grasp_node src/bwi_grasp_gpd.cpp)
 add_dependencies(bwi_grasp_node ${catkin_EXPORTED_TARGETS})
 target_link_libraries(bwi_grasp_node ${catkin_LIBRARIES})
+
+add_executable(gpd_grasp_action src/gpd_grasp_action.cpp)
+add_dependencies(gpd_grasp_action ${catkin_EXPORTED_TARGETS})
+target_link_libraries(gpd_grasp_action ${catkin_LIBRARIES})
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
