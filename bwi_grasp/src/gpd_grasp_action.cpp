@@ -61,6 +61,7 @@
 #include <pcl/segmentation/extract_clusters.h>
 
 #include <pcl/kdtree/kdtree.h>
+
 #include <pcl_conversions/pcl_conversions.h>
 
 #include <tf/transform_listener.h>
@@ -98,7 +99,7 @@ typedef pcl::PointCloud<PointT> PointCloudT;
 #define MAX_DISTANCE_TO_PLANE 0.075
 
 //used when deciding whether a pair of an approach pose and a grasp pose are good;
-//if the angular difference in joint space is too big, this means that the robot 
+//if the angular difference in joint space is too big, this means that the robot
 //cannot directly go from approach to grasp pose (so we filter those pairs out)
 #define ANGULAR_DIFF_THRESHOLD 3.0
 
@@ -122,26 +123,26 @@ protected:
     sensor_msgs::JointState current_state;
     kinova_msgs::FingerPosition current_finger;
     geometry_msgs::PoseStamped current_pose;
-    bool heardPose;
-    bool heardJointState;
+    bool heardPose = false;
+    bool heardJoinstState = false;
     
-    bool heardGraps;
+    bool heardGrasps = false;
+    //agile_grasp::Grasps current_grasps; //change to new message type
     bwi_grasp::GraspWithScoreList current_grasps;
     
-    // Where we store results from calling the perception service
+    //where we store results from calling the perception service
     std::vector<PointCloudT::Ptr > detected_objects;
     PointCloudT::Ptr cloud_plane (new PointCloudT);
     
     geometry_msgs::PoseStamped current_moveit_pose;
     
-    // TODO: need to move the floats?
-    // Store out-of-view position here
+    //store out-of-view position here
     sensor_msgs::JointState joint_state_outofview;
     geometry_msgs::PoseStamped pose_outofview;
     
     sensor_msgs::PointCloud2 cloud_ros;
     
-    // Publishers
+    //publishers
     ros::Publisher pub_velocity;
     ros::Publisher cloud_pub;
     ros::Publisher cloud_grasp_pub;
@@ -160,7 +161,7 @@ protected:
     
     // Subscribers -- in action server need to be class members
     ros::Subscriber sub_angles;
-//    ros::Subscriber sub_torques;
+    //    ros::Subscriber sub_torques;
     ros::Subscriber sub_tool;
     ros::Subscriber sub_finger;
     ros::Subscriber sub_grasps;
@@ -178,41 +179,41 @@ protected:
     
 public:
     GpdGraspActionServer(std::string name):
-        as_(nh_, name, boost::bind(&GpdGraspActionServer::executeCB, this, _1), false),
-        action_name_(name) {
-            
+    as_(nh_, name, boost::bind(&GpdGraspActionServer::executeCB, this, _1), false),
+    action_name_(name) {
+        
         heardPose = false;
         heardJoinstState = false;
         heardGrasps = false;
-            
+        
         //create subscriber to joint angles
         ros::Subscriber sub_angles = nh_.subscribe ("/m1n6s200_driver/out/joint_state", 1, joint_state_cb);
-            
+        
         //create subscriber to tool position topic
         ros::Subscriber sub_tool = nh_.subscribe("/m1n6s200_driver/out/tool_pose", 1, toolpos_cb);
-            
+        
         //subscriber for fingers
         ros::Subscriber sub_finger = nh_.subscribe("/m1n6s200_driver/out/finger_position", 1, fingers_cb);
-            
+        
         //subscriber for grasps
         //change to our topic
         //ros::Subscriber sub_grasps = n.subscribe("/find_grasps/grasps_handles",1, grasps_cb);
         ros::Subscriber sub_grasps = nh_.subscribe("/bwi_grasp/grasps", 1, grasps_cb);
-            
+        
         //publish velocities
         pub_velocity = nh_.advertise<kinova_msgs::PoseVelocity>("/m1n6s200_driver/in/cartesian_velocity", 10);
-            
+        
         //publish pose array
         pose_array_pub = nh_.advertise<geometry_msgs::PoseArray>("/agile_grasp_demo/pose_array", 10);
-            
+        
         //publish pose
         pose_pub = nh_.advertise<geometry_msgs::PoseStamped>("/agile_grasp_demo/pose_out", 10);
         pose_fk_pub = nh_.advertise<geometry_msgs::PoseStamped>("/agile_grasp_demo/pose_fk_out", 10);
-            
+        
         //debugging publisher
         cloud_pub = nh_.advertise<sensor_msgs::PointCloud2>("agile_grasp_demo/cloud_debug", 10);
         cloud_grasp_pub = nh_.advertise<sensor_msgs::PointCloud2>("agile_grasp_demo/cloud", 10);
-            
+        
         ROS_INFO("Starting gpd grasp action server...")
         as_.start()
     }
@@ -229,16 +230,18 @@ public:
     // Joint state cb
     void joint_state_cb (const sensor_msgs::JointStateConstPtr& input) {
         
-        if (input->position.size() == NUM_JOINTS) {
+        if (input->position.size() == NUM_JOINTS){
             current_state = *input;
             heardJoinstState = true;
         }
+        //ROS_INFO_STREAM(current_state);
     }
     
     // Tool position cb
     void toolpos_cb (const geometry_msgs::PoseStamped &msg) {
         current_pose = msg;
         heardPose = true;
+        //  ROS_INFO_STREAM(current_pose);
     }
     
     // Finger state cb
@@ -246,18 +249,17 @@ public:
         current_finger = msg;
     }
     
-    void grasps_cb(const bwi_grasp::GraspWithScoreList &msg) {
+    void grasps_cb(const bwi_grasp::GraspWithScoreList &msg){
         current_grasps = msg;
-        ROS_INFO_STREAM("Found" << current_grasps.grasps.size() << " current grasps");
         heardGrasps = true;
     }
     
-    void listenForArmData(float rate) {
+    void listenForArmData(float rate){
         heardPose = false;
         heardJoinstState = false;
         ros::Rate r(rate);
         
-        while (ros::ok()) {
+        while (ros::ok()){
             ros::spinOnce();
             
             if (heardPose && heardJoinstState)
@@ -267,89 +269,22 @@ public:
         }
     }
     
-    void listenForGrasps(float rate) {
+    void listenForGrasps(float rate){
         ros::Rate r(rate);
         
-        while (ros::ok()) {
+        while (ros::ok()){
             ros::spinOnce();
-            
-            if (heardGrasps)
+            if (heardGrasps) {
+                ROS_INFO_STREAM("Listen for grasps terminating");
                 return;
+            }
             
             r.sleep();
         }
     }
     
-    void spinSleep(double duration) {
-        int rateHertz = 40;
-        
-        ros::Rate r(rateHertz);
-        for(int i = 0; i < (int)duration * rateHertz; i++) {
-            
-            
-            ros::spinOnce();
-            r.sleep();
-        }
-    }
-    
-    // Lifts ef specified distance
-    void lift_velocity(double vel, double distance) {
-        ros::Rate r(4);
-        ros::spinOnce();
-        double distance_init = .2;
-        kinova_msgs::PoseVelocity T;
-        T.twist_linear_x= 0.0;
-        T.twist_linear_y= 0.0;
-        T.twist_angular_x= 0.0;
-        T.twist_angular_y= 0.0;
-        T.twist_angular_z= 0.0;
-        
-        for(int i = 0; i < std::abs(distance/vel/.25); i++){
-            ros::spinOnce();
-            if(distance > 0)
-                T.twist_linear_z = vel;
-            else
-                T.twist_linear_z= -vel;
-            pub_velocity.publish(T);
-            r.sleep();
-        }
-        T.twist_linear_z= 0.0;
-        pub_velocity.publish(T);
-    }
-    
-    void lift(ros::NodeHandle n, double x) {
-        listenForArmData(30.0);
-        
-        geometry_msgs::PoseStamped p_target = current_pose;
-        
-        p_target.pose.position.z += x;
-        segbot_arm_manipulation::moveToPoseMoveIt(n,p_target);
-    }
-    
-    void cartesianVelocityMove(double dx, double dy, double dz, double duration) {
-        int rateHertz = 40;
-        kinova_msgs::PoseVelocity velocityMsg;
-        
-        ros::Rate r(rateHertz);
-        for(int i = 0; i < (int)duration * rateHertz; i++) {
-            
-            
-            velocityMsg.twist_linear_x = dx;
-            velocityMsg.twist_linear_y = dy;
-            velocityMsg.twist_linear_z = dz;
-            
-            velocityMsg.twist_angular_x = 0.0;
-            velocityMsg.twist_angular_y = 0.0;
-            velocityMsg.twist_angular_z = 0.0;
-            
-            
-            pub_velocity.publish(velocityMsg);
-            ROS_INFO("Published cartesian vel. command");
-            r.sleep();
-        }
-    }
-    
-    double angular_difference(geometry_msgs::Quaternion c, geometry_msgs::Quaternion d) {
+    double angular_difference(geometry_msgs::Quaternion c,
+                              geometry_msgs::Quaternion d) {
         Eigen::Vector4f dv;
         dv[0] = d.w; dv[1] = d.x; dv[2] = d.y; dv[3] = d.z;
         Eigen::Matrix<float, 3,4> inv;
@@ -362,7 +297,7 @@ public:
     }
     
     int selectObjectToGrasp(std::vector<PointCloudT::Ptr > candidates) {
-        // Currently, we just pick the one with the most points
+        //currently, we just pick the one with the most points
         int max_num_points = -1;
         int index = -1;
         
@@ -400,13 +335,13 @@ public:
         Eigen::Vector3d approach_; //  grasp approach vector
         Eigen::Vector3d binormal_; //  vector orthogonal to the hand axis and the grasp approach direction
         
-        tf::vectorMsgToEigen(grasp.axis, axis_);
+        tf::vectorMsgToEigen(grasp.axis, binormal_);
         tf::vectorMsgToEigen(grasp.approach, approach_);
         tf::vectorMsgToEigen(grasp.center, center_);
         tf::vectorMsgToEigen(grasp.surface_center, surface_center_);
         
         approach_ = -1.0 * approach_; // make approach vector point away from handle centroid
-        binormal_ = axis_.cross(approach_); // binormal (used as rotation axis to generate additional approach vectors)
+        axis_ = binormal_.cross(approach_); // binormal (used as rotation axis to generate additional approach vectors)
         
         //step 1: calculate hand orientation
         
@@ -483,7 +418,9 @@ public:
         return pose_st;
     }
     
-    bool acceptGrasp(GraspCartesianCommand gcc, /*PointCloudT::Ptr object,*/ Eigen::Vector4f plane_c) {
+    bool acceptGrasp(GraspCartesianCommand gcc,
+                     /*PointCloudT::Ptr object,*/
+                     Eigen::Vector4f plane_c){
         //filter 1: if too close to the plane
         pcl::PointXYZ p_a;
         p_a.x=gcc.approach_pose.pose.position.x;
@@ -508,7 +445,6 @@ public:
                                                    geometry_msgs::PoseStamped p) {
         ros::ServiceClient ikine_client = n.serviceClient<moveit_msgs::GetPositionIK> ("/compute_ik");
         
-        
         moveit_msgs::GetPositionIK::Request ikine_request;
         moveit_msgs::GetPositionIK::Response ikine_response;
         ikine_request.ik_request.group_name = "arm";
@@ -523,6 +459,16 @@ public:
         }
         
         return ikine_response;
+    }
+    
+    void spinSleep(double duration) {
+        int rateHertz = 40;
+        
+        ros::Rate r(rateHertz);
+        for(int i = 0; i < (int)duration * rateHertz; i++) {
+            ros::spinOnce();
+            r.sleep();
+        }
     }
     
     void updateFK(ros::NodeHandle n) {
@@ -554,24 +500,130 @@ public:
             ROS_INFO("Call successful. Response:");
             ROS_INFO_STREAM(fkine_response);
         } else {
-            ROS_ERROR("Call failed. Terminating.");
+            // TODO -- set as error?
+            ROS_WARN("Call failed. Terminating.");
+            as_.setAborted(result_);
+            return;
             //ros::shutdown();
+        }
+        
+    }
+    
+    void cartesianVelocityMove(double dx, double dy, double dz, double duration) {
+        int rateHertz = 40;
+        kinova_msgs::PoseVelocity velocityMsg;
+        
+        ros::Rate r(rateHertz);
+        for(int i = 0; i < (int)duration * rateHertz; i++) {
+            
+            velocityMsg.twist_linear_x = dx;
+            velocityMsg.twist_linear_y = dy;
+            velocityMsg.twist_linear_z = dz;
+            
+            velocityMsg.twist_angular_x = 0.0;
+            velocityMsg.twist_angular_y = 0.0;
+            velocityMsg.twist_angular_z = 0.0;
+            
+            
+            pub_velocity.publish(velocityMsg);
+            ROS_INFO("Published cartesian vel. command");
+            r.sleep();
         }
     }
     
+    //lifts ef specified distance
+    void lift_velocity(double vel, double distance){
+        double pubRate = 40.0;
+        ros::Rate r(pubRate);
+        ros::spinOnce();
+        double distance_init = .2;
+        kinova_msgs::PoseVelocity T;
+        T.twist_linear_x= 0.0;
+        T.twist_linear_y= 0.0;
+        T.twist_angular_x= 0.0;
+        T.twist_angular_y= 0.0;
+        T.twist_angular_z= 0.0;
+        
+        for(int i = 0; i < std::abs(pubRate*distance/vel); i++){
+            ros::spinOnce();
+            if(distance > 0)
+                T.twist_linear_z = vel;
+            else
+                T.twist_linear_z= -vel;
+            pub_velocity.publish(T);
+            r.sleep();
+        }
+        T.twist_linear_z= 0.0;
+        pub_velocity.publish(T);
+    }
+    
+    void move_with_cartesian_velocities(const kinova_msgs::PoseVelocity &velocities,
+                                        const double seconds) {
+        // Per the Kinova documentation, we have to publish at exactly 100Hz to get
+        // predictable behavior
+        ros::Rate r(100);
+        
+        ros::Time end = ros::Time::now() + ros::Duration(seconds);
+        while (ros::ok()) {
+            //collect messages
+            ros::spinOnce();
+            
+            //publish velocity message
+            pub_velocity.publish(velocities);
+            r.sleep();
+            if (ros::Time::now() > end) {
+                break;
+            }
+        }
+        kinova_msgs::PoseVelocity zeros;
+        pub_velocity.publish(zeros);
+        
+    }
+    
+    void lift(ros::NodeHandle n, double x) {
+        listenForArmData(30.0);
+        
+        geometry_msgs::PoseStamped p_target = current_pose;
+        
+        p_target.pose.position.z += x;
+        segbot_arm_manipulation::moveToPoseMoveIt(n,p_target);
+    }
+
     void executeCB() {
-        // Store out of table joint position
+        std::string joint_state_topic = "/m1n6s200_driver/out/joint_state";
+        while (true) {
+            boost::shared_ptr<const sensor_msgs::JointState> result = ros::topic::waitForMessage<sensor_msgs::JointState>(joint_state_topic, n, ros::Duration(5.0));
+            if (result) {
+                break;
+            }
+            ROS_WARN("Could not read joint states, retrying...");
+        }
+        
+        // user input
+        char in;
+        
+        ROS_INFO("Demo starting...move the arm to a position where it is not occluding the table.");
+        //TODO This is where we have to change the file
+        pressEnter();
+        
+        ROS_INFO("Got user input");
+        
+        //store out of table joint position
         listenForArmData(30.0);
         joint_state_outofview = current_state;
         pose_outofview = current_pose;
+        
+        ROS_INFO("Stored current joint position");
         
         segbot_arm_manipulation::openHand();
         
         // gpd will do its own picking up which object to pick up using RGBD image data
         
+        ROS_INFO("Getting tabletop scene...");
+        
         segbot_arm_perception::TabletopPerception::Response table_scene = segbot_arm_manipulation::getTabletopScene(nh_);
         
-        ROS_INFO("Calculated tabletop scene");
+        ROS_INFO("calculated tabletop scene");
         //step 2: extract the data from the response
         /*detected_objects.clear();
          for (unsigned int i = 0; i < table_scene.cloud_clusters.size(); i++){
@@ -583,7 +635,7 @@ public:
          }
          
          if (detected_objects.size() == 0){
-         ROS_WARN("[gpd_grasp_action.cpp] No objects detected...aborting.");
+         ROS_WARN("[agile_grasp_demo.cpp] No objects detected...aborting.");
          return 1;
          }*/
         
@@ -612,13 +664,13 @@ public:
         poses_msg.header.stamp = cloud_ros.header.stamp;
         poses_msg.header.frame_id = "m1n6s200_link_base";
         
-        ROS_INFO("[gpd_grasp_action.cpp] Heard %i grasps",(int)current_grasps.grasps.size());
+        ROS_INFO("[agile_grasp_demo.cpp] Heard %i grasps",(int)current_grasps.grasps.size());
         
-        // Next, compute approach and grasp poses for each detected grasp
+        //next, compute approach and grasp poses for each detected grasp
         double hand_offset_grasp = -0.02;
         double hand_offset_approach = -0.13;
         
-        // Wait for transform from visual space to arm space
+        //wait for transform from visual space to arm space
         ROS_INFO("Waiting for transform...");
         listener.waitForTransform( "/base_footprint","m1n6s200_link_base", ros::Time(0), ros::Duration(5.0));
         
@@ -637,53 +689,54 @@ public:
             ROS_INFO_STREAM("Grasp turned into pose...");
             ROS_INFO_STREAM("Approach: \n" << gc_i.approach_pose << "\nGrasp: \n" << gc_i.approach_pose);
             
-            //if (acceptGrasp(gc_i,/*detected_objects.at(selected_object),*/plane_coef_vector)){
-            
-            ROS_INFO_STREAM("Accepted grasp");
-            listener.transformPose("m1n6s200_link_base", gc_i.approach_pose, gc_i.approach_pose);
-            listener.transformPose("m1n6s200_link_base", gc_i.grasp_pose, gc_i.grasp_pose);
-            
-            //filter two -- if IK fails
-            moveit_msgs::GetPositionIK::Response  ik_response_approach = computeIK(nh_,gc_i.approach_pose);
-            if (ik_response_approach.error_code.val == 1){
-                ROS_INFO_STREAM("Got past second check");
-                moveit_msgs::GetPositionIK::Response  ik_response_grasp = computeIK(nh_,gc_i.grasp_pose);
+            if (acceptGrasp(gc_i,/*detected_objects.at(selected_object),*/plane_coef_vector)){
                 
-                if (ik_response_grasp.error_code.val == 1){
-                    ROS_INFO_STREAM("Got past third check");
+                ROS_INFO_STREAM("Accepted grasp");
+                listener.transformPose("m1n6s200_link_base", gc_i.approach_pose, gc_i.approach_pose);
+                listener.transformPose("m1n6s200_link_base", gc_i.grasp_pose, gc_i.grasp_pose);
+                
+                //filter two -- if IK fails
+                moveit_msgs::GetPositionIK::Response  ik_response_approach = computeIK(n,gc_i.approach_pose);
+                if (ik_response_approach.error_code.val == 1){
+                    ROS_INFO_STREAM("Got past second check");
+                    moveit_msgs::GetPositionIK::Response  ik_response_grasp = computeIK(n,gc_i.grasp_pose);
                     
-                    //now check to see how close the two sets of joint angles are
-                    std::vector<double> D = segbot_arm_manipulation::getJointAngleDifferences(ik_response_approach.solution.joint_state, ik_response_grasp.solution.joint_state );
-                    
-                    double sum_d = 0;
-                    for (int p = 0; p < D.size(); p++){
-                        sum_d += D[p];
-                    }
-                    
-                    if (sum_d < ANGULAR_DIFF_THRESHOLD){
-                        ROS_INFO("Angle diffs for grasp %i: %f, %f, %f, %f, %f, %f",(int)grasp_commands.size(),D[0],D[1],D[2],D[3],D[4],D[5]);
+                    if (ik_response_grasp.error_code.val == 1){
+                        ROS_INFO_STREAM("Got past third check");
                         
-                        ROS_INFO("Sum diff: %f",sum_d);
+                        //now check to see how close the two sets of joint angles are
+                        std::vector<double> D = segbot_arm_manipulation::getJointAngleDifferences(ik_response_approach.solution.joint_state, ik_response_grasp.solution.joint_state );
                         
-                        //store the IK results
-                        gc_i.approach_q = ik_response_approach.solution.joint_state;
-                        gc_i.grasp_q = ik_response_grasp.solution.joint_state;
+                        double sum_d = 0;
+                        for (int p = 0; p < D.size(); p++){
+                            sum_d += D[p];
+                        }
                         
-                        //add score
-                        scores.push_back(current_grasps.grasps.at(i).score.data);
-                        
-                        grasp_commands.push_back(gc_i);
-                        poses.push_back(p_grasp_i);
-                        poses_msg.poses.push_back(gc_i.approach_pose.pose);
+                        if (sum_d < ANGULAR_DIFF_THRESHOLD){
+                            ROS_INFO("Angle diffs for grasp %i: %f, %f, %f, %f, %f, %f",(int)grasp_commands.size(),D[0],D[1],D[2],D[3],D[4],D[5]);
+                            
+                            ROS_INFO("Sum diff: %f",sum_d);
+                            
+                            //store the IK results
+                            gc_i.approach_q = ik_response_approach.solution.joint_state;
+                            gc_i.grasp_q = ik_response_grasp.solution.joint_state;
+                            
+                            //add score
+                            scores.push_back(current_grasps.grasps.at(i).score.data);
+                            
+                            grasp_commands.push_back(gc_i);
+                            poses.push_back(p_grasp_i);
+                            poses_msg.poses.push_back(gc_i.approach_pose.pose);
+                        }
                     }
                 }
             }
-            //}
+            
         }
-
-        // Make sure we're working with the correct tool pose
+        
+        //make sure we're working with the correct tool pose
         listenForArmData(30.0);
-        ROS_INFO("[gpd_grasp_action.cpp] Heard arm pose.");
+        ROS_INFO("[agile_grasp_demo.cpp] Heard arm pose.");
         
         //now, select the target grasp
         updateFK(nh_);
@@ -735,16 +788,16 @@ public:
         //set obstacle avoidance
         /*std::vector<sensor_msgs::PointCloud2> obstacle_clouds;
          obstacle_clouds.push_back(cloud_ros);
-         segbot_arm_manipulation::setArmObstacles(nh_,obstacle_clouds);*/
+         segbot_arm_manipulation::setArmObstacles(n,obstacle_clouds);*/
         
-        segbot_arm_manipulation::moveToPoseMoveIt(nh_,grasp_commands.at(max_score_index).approach_pose);
+        segbot_arm_manipulation::moveToPoseMoveIt(n,grasp_commands.at(max_score_index).approach_pose);
         
         //clear obstacles for final approach
         /*obstacle_clouds.clear();
          obstacle_clouds.push_back(table_scene.cloud_plane);
-         segbot_arm_manipulation::setArmObstacles(nh_,obstacle_clouds);*/
+         segbot_arm_manipulation::setArmObstacles(n,obstacle_clouds);*/
         
-        segbot_arm_manipulation::moveToPoseMoveIt(nh_,grasp_commands.at(max_score_index).approach_pose);
+        segbot_arm_manipulation::moveToPoseMoveIt(n,grasp_commands.at(max_score_index).approach_pose);
         
         //pressEnter();
         
@@ -757,7 +810,7 @@ public:
         /*std::cout << "Press '1' to move to approach pose or Ctrl-z to quit..." << std::endl;		
          std::cin >> in;*/
         
-        segbot_arm_manipulation::moveToPoseMoveIt(nh_,grasp_commands.at(max_score_index).grasp_pose);
+        segbot_arm_manipulation::moveToPoseMoveIt(n,grasp_commands.at(max_score_index).grasp_pose);
         spinSleep(3.0);
         
         //listenForArmData(30.0);
@@ -769,37 +822,38 @@ public:
         
         //lift for a while
         //pressEnter();
+        ROS_INFO_STREAM("Attempting to lift...");
         
-        //LIFT action
+        kinova_msgs::PoseVelocity velocities;
+        velocities.twist_linear_z = .2;
+        move_with_cartesian_velocities(velocities, 3);
+        //lift_velocity(0.2,5.0); 
         
         //we need to call angular velocity control before we can do cartesian control right after using the fingers
-        lift(nh_,0.065);
-        spinSleep(0.5);
-        lift(nh_,-0.05);
         segbot_arm_manipulation::openHand();
         
-        //MOVE BACK
-        lift(nh_,0.05);
+        //TODO actually give velocity commands instead of calling lift
         
-        //moveToPoseMoveIt(nh_,pose_outofview);
-        //moveToPoseMoveIt(nh_,pose_outofview);
+        //moveToPoseMoveIt(n,pose_outofview);
+        //moveToPoseMoveIt(n,pose_outofview);
         
         segbot_arm_manipulation::homeArm(nh_);
         
-        segbot_arm_manipulation::moveToJointState(nh_,joint_state_outofview);
-        segbot_arm_manipulation::moveToJointState(nh_,joint_state_outofview);
+        segbot_arm_manipulation::moveToJointState(n,joint_state_outofview);
+        segbot_arm_manipulation::moveToJointState(n,joint_state_outofview);
         
         //moveToJointState(home_position_approach);
         //moveToJointState(home_position);
-        
         result_.success = true;
         as_.setSucceeded(result_);
     }
-
 };
 
 int main(int argc, char** argv) {
     ros::init(argc, argv, "gpd_grasp_as")
+    
+    //register ctrl-c
+    signal(SIGINT, sig_handler);
     
     GpdGraspActionServer as(ros::this_node::getName());
     ros::spin();
@@ -809,8 +863,8 @@ int main(int argc, char** argv) {
 
 /* what happens when ctr-c is pressed */
 void sig_handler(int sig) {
-  g_caught_sigint = true;
-  ROS_INFO("caught sigint, init shutdown sequence...");
-  ros::shutdown();
-  exit(1);
+    g_caught_sigint = true;
+    ROS_INFO("caught sigint, init shutdown sequence...");
+    ros::shutdown();
+    exit(1);
 };
