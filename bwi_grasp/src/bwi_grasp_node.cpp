@@ -186,7 +186,6 @@ void fingers_cb (const kinova_msgs::FingerPosition msg) {
 
 void grasps_cb(const bwi_grasp::GraspWithScoreList &msg){
 	current_grasps = msg;
-	ROS_INFO_STREAM("Found" << current_grasps.grasps.size() << " current grasps");	
 	heardGrasps = true;
 }
 
@@ -210,9 +209,10 @@ void listenForGrasps(float rate){
 	
 	while (ros::ok()){
 		ros::spinOnce();
-		
-		if (heardGrasps)
-			return;
+		if (heardGrasps) {
+			ROS_INFO_STREAM("Listen for grasps terminating");
+            return;
+        }
 		
 		r.sleep();
 	}
@@ -270,13 +270,13 @@ geometry_msgs::PoseStamped graspToPose(bwi_grasp::GraspWithScore grasp, double h
 	Eigen::Vector3d approach_; //  grasp approach vector
 	Eigen::Vector3d binormal_; //  vector orthogonal to the hand axis and the grasp approach direction
 	
-	tf::vectorMsgToEigen(grasp.axis, axis_);
+	tf::vectorMsgToEigen(grasp.axis, binormal_);
 	tf::vectorMsgToEigen(grasp.approach, approach_);
 	tf::vectorMsgToEigen(grasp.center, center_);
 	tf::vectorMsgToEigen(grasp.surface_center, surface_center_);
 	
 	approach_ = -1.0 * approach_; // make approach vector point away from handle centroid
-	binormal_ = axis_.cross(approach_); // binormal (used as rotation axis to generate additional approach vectors)
+	axis_ = binormal_.cross(approach_); // binormal (used as rotation axis to generate additional approach vectors)
 	
 	//step 1: calculate hand orientation
 	
@@ -411,6 +411,8 @@ void spinSleep(double duration){
 }
 
 void updateFK(ros::NodeHandle n){
+	ROS_INFO("In update fk");
+
 	ros::ServiceClient fkine_client = n.serviceClient<moveit_msgs::GetPositionFK> ("/compute_fk");
 	
 	moveit_msgs::GetPositionFK::Request fkine_request;
@@ -438,7 +440,9 @@ void updateFK(ros::NodeHandle n){
  		current_moveit_pose = fkine_response.pose_stamped.at(0);
  		ROS_INFO("Call successful. Response:");
  		ROS_INFO_STREAM(fkine_response);
+		ROS_INFO("End of response!");
  	} else {
+		ROS_INFO("hello im sad");
  		ROS_ERROR("Call failed. Terminating.");
  		//ros::shutdown();
  	}
@@ -483,7 +487,8 @@ void cartesianVelocityMove(double dx, double dy, double dz, double duration){
 
 //lifts ef specified distance
 void lift_velocity(double vel, double distance){
-	ros::Rate r(4);
+	double pubRate = 40.0;
+	ros::Rate r(pubRate);
 	ros::spinOnce();
 	double distance_init = .2;
 	kinova_msgs::PoseVelocity T;
@@ -493,7 +498,7 @@ void lift_velocity(double vel, double distance){
 	T.twist_angular_y= 0.0;
 	T.twist_angular_z= 0.0;
 
-	for(int i = 0; i < std::abs(distance/vel/.25); i++){
+	for(int i = 0; i < std::abs(pubRate*distance/vel); i++){
 		ros::spinOnce();
 		if(distance > 0)
 			T.twist_linear_z = vel;
@@ -504,9 +509,30 @@ void lift_velocity(double vel, double distance){
 	}
 	T.twist_linear_z= 0.0;
 	pub_velocity.publish(T);
-	
-	
 }
+
+void move_with_cartesian_velocities(const kinova_msgs::PoseVelocity &velocities, const double seconds) {
+    // Per the Kinova documentation, we have to publish at exactly 100Hz to get
+    // predictable behavior
+    ros::Rate r(100);
+
+    ros::Time end = ros::Time::now() + ros::Duration(seconds);
+    while (ros::ok()) {
+        //collect messages
+        ros::spinOnce();
+
+        //publish velocity message
+        pub_velocity.publish(velocities);
+        r.sleep();
+        if (ros::Time::now() > end) {
+            break;
+        }
+    }
+    kinova_msgs::PoseVelocity zeros;
+    pub_velocity.publish(zeros);
+
+}
+
 
 void lift(ros::NodeHandle n, double x){
 	listenForArmData(30.0);
@@ -531,7 +557,7 @@ int main(int argc, char **argv) {
 
 	//subscriber for fingers
 	ros::Subscriber sub_finger = n.subscribe("/m1n6s200_driver/out/finger_position", 1, fingers_cb);
-	  
+
 	//subscriber for grasps
 	//change to our topic
 	//ros::Subscriber sub_grasps = n.subscribe("/find_grasps/grasps_handles",1, grasps_cb);  
@@ -539,6 +565,7 @@ int main(int argc, char **argv) {
  
 	//publish velocities
 	pub_velocity = n.advertise<kinova_msgs::PoseVelocity>("/m1n6s200_driver/in/cartesian_velocity", 10);
+	
 	
 	//publish pose array
 	pose_array_pub = n.advertise<geometry_msgs::PoseArray>("/agile_grasp_demo/pose_array", 10);
@@ -556,22 +583,26 @@ int main(int argc, char **argv) {
 	
 	//register ctrl-c
 	signal(SIGINT, sig_handler);
-
+	std::string joint_state_topic = "/m1n6s200_driver/out/joint_state";
+	while (true) {
+	boost::shared_ptr<const sensor_msgs::JointState> result = ros::topic::waitForMessage<sensor_msgs::JointState>(joint_state_topic, n, ros::Duration(5.0));
+		if (result) {
+			break;
+		}
+		ROS_WARN("Could not read joint states, retrying...");	
+	}
 	
 	//user input
-    char in;
-	
-	
+    	char in;
 	
 	ROS_INFO("Demo starting...move the arm to a position where it is not occluding the table.");
+	//TODO This is where we have to change the file
 	pressEnter();
-	
 	
 	//store out of table joint position
 	listenForArmData(30.0);
 	joint_state_outofview = current_state;
 	pose_outofview = current_pose;
-	
 
 	segbot_arm_manipulation::openHand();
 	
@@ -637,27 +668,30 @@ int main(int argc, char **argv) {
 		geometry_msgs::PoseStamped p_grasp_i = graspToPose(current_grasps.grasps.at(i),hand_offset_grasp,"xtion_camera_rgb_optical_frame");
 		geometry_msgs::PoseStamped p_approach_i = graspToPose(current_grasps.grasps.at(i),hand_offset_approach,"xtion_camera_rgb_optical_frame");
 		
-
-        ROS_INFO_STREAM("Checking grasp...");
-        ROS_INFO_STREAM(current_grasps.grasps.at(i));
+        	ROS_INFO_STREAM("Checking grasp...");
+       		ROS_INFO_STREAM(current_grasps.grasps.at(i));
 		GraspCartesianCommand gc_i;
 		gc_i.approach_pose = p_approach_i;
 		gc_i.grasp_pose = p_grasp_i;
 		ROS_INFO_STREAM("Grasp turned into pose...");
-        ROS_INFO_STREAM("Approach: \n" << gc_i.approach_pose << "\nGrasp: \n" << gc_i.approach_pose);
+        	ROS_INFO_STREAM("Approach: \n" << gc_i.approach_pose << "\nGrasp: \n" << gc_i.approach_pose);
 
-		//if (acceptGrasp(gc_i,/*detected_objects.at(selected_object),*/plane_coef_vector)){
+		if (acceptGrasp(gc_i,/*detected_objects.at(selected_object),*/plane_coef_vector)){
 			
 			ROS_INFO_STREAM("Accepted grasp");
 			listener.transformPose("m1n6s200_link_base", gc_i.approach_pose, gc_i.approach_pose);
 			listener.transformPose("m1n6s200_link_base", gc_i.grasp_pose, gc_i.grasp_pose);
 			
 			//filter two -- if IK fails
-			moveit_msgs::GetPositionIK::Response  ik_response_approach = computeIK(n,gc_i.approach_pose);
+			moveit_msgs::GetPositionIK::Response ik_response_approach = computeIK(n,gc_i.approach_pose);
+
+			ROS_INFO("hello finished computeIK filter");
+			ROS_INFO_STREAM("Approach ik error code: " << ik_response_approach.error_code.val);
+
 			if (ik_response_approach.error_code.val == 1){
 				ROS_INFO_STREAM("Got past second check");
 				moveit_msgs::GetPositionIK::Response  ik_response_grasp = computeIK(n,gc_i.grasp_pose);
-		
+				
 				if (ik_response_grasp.error_code.val == 1){
 					ROS_INFO_STREAM("Got past third check");
 					
@@ -668,8 +702,7 @@ int main(int argc, char **argv) {
 					for (int p = 0; p < D.size(); p++){
 						sum_d += D[p];
 					}
-				
-					
+									
 					if (sum_d < ANGULAR_DIFF_THRESHOLD){
 						ROS_INFO("Angle diffs for grasp %i: %f, %f, %f, %f, %f, %f",(int)grasp_commands.size(),D[0],D[1],D[2],D[3],D[4],D[5]);
 						
@@ -683,16 +716,18 @@ int main(int argc, char **argv) {
 						//add score
 						scores.push_back(current_grasps.grasps.at(i).score.data);
 								
+						ROS_INFO("Adding grasp commands pose");
 						grasp_commands.push_back(gc_i);
 						poses.push_back(p_grasp_i);
 						poses_msg.poses.push_back(gc_i.approach_pose.pose);
 					}
 				}
 			}
-		//}
-		
-		
+		}
+				
 	}
+
+	ROS_INFO_STREAM("Number of grasps after processing before updateFK: " << grasp_commands.size());
 	
 	//make sure we're working with the correct tool pose
 	listenForArmData(30.0);
@@ -786,17 +821,17 @@ int main(int argc, char **argv) {
 	
 	//lift for a while
 	//pressEnter();
-
-	//LIFT action
+    	ROS_INFO_STREAM("Attempting to lift...");
+	
+	kinova_msgs::PoseVelocity velocities;
+	velocities.twist_linear_z = .2;
+	move_with_cartesian_velocities(velocities, 3);
+	//lift_velocity(0.2,5.0); 
 	
 	//we need to call angular velocity control before we can do cartesian control right after using the fingers
-	lift(n,0.065); 
-	spinSleep(0.5);
-	lift(n,-0.05); 
 	segbot_arm_manipulation::openHand();
 	
-	//MOVE BACK
-	lift(n,0.05); 
+	//TODO actually give velocity commands instead of calling lift
 	
 	//moveToPoseMoveIt(n,pose_outofview);
 	//moveToPoseMoveIt(n,pose_outofview);

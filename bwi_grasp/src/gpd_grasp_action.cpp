@@ -24,13 +24,13 @@
 
 //actions
 #include <actionlib/client/simple_action_client.h>
-#include <actionlib/server/simple_action_client.h>
+#include <actionlib/server/simple_action_server.h>
 #include "kinova_msgs/SetFingersPositionAction.h"
 #include "kinova_msgs/ArmPoseAction.h"
 #include "kinova_msgs/ArmJointAnglesAction.h"
 
 // action definition
-#include "bwi_grasp/GpdGrasp.action"
+#include "bwi_grasp/GpdGraspAction.h"
 
 //#include "agile_grasp/Grasps.h"
 #include "bwi_grasp/GraspWithScoreList.h"
@@ -116,23 +116,23 @@ protected:
     // NodeHandle instance must be created before this line. Otherwise strage
     // error may occur.
     actionlib::SimpleActionServer<bwi_grasp::GpdGraspAction> as_;
-    std::string action_name;
+    std::string action_name_;
     // TODO: figure out what result_ should be
     bwi_grasp::GpdGraspResult result_;
     
     sensor_msgs::JointState current_state;
     kinova_msgs::FingerPosition current_finger;
     geometry_msgs::PoseStamped current_pose;
-    bool heardPose = false;
-    bool heardJoinstState = false;
+    bool heardPose;
+    bool heardJoinstState;
     
-    bool heardGrasps = false;
+    bool heardGrasps;
     //agile_grasp::Grasps current_grasps; //change to new message type
     bwi_grasp::GraspWithScoreList current_grasps;
     
     //where we store results from calling the perception service
+    // TODO: Figure out if actually used
     std::vector<PointCloudT::Ptr > detected_objects;
-    PointCloudT::Ptr cloud_plane (new PointCloudT);
     
     geometry_msgs::PoseStamped current_moveit_pose;
     
@@ -150,11 +150,8 @@ protected:
     ros::Publisher pose_pub;
     ros::Publisher pose_fk_pub;
     
-    // TODO: Figure out if actually used
-    std::vector<PointCloudT::Ptr> detected_objects
-    
     // Used to compute transforms
-    tf::TransformListener listener
+    tf::TransformListener listener;
     
     bool heard_string;
     ros::Subscriber sub_string_;
@@ -178,7 +175,7 @@ protected:
     };
     
 public:
-    GpdGraspActionServer(std::string name):
+    GpdGraspActionServer(std::string name) :
     as_(nh_, name, boost::bind(&GpdGraspActionServer::executeCB, this, _1), false),
     action_name_(name) {
         
@@ -187,18 +184,20 @@ public:
         heardGrasps = false;
         
         //create subscriber to joint angles
-        ros::Subscriber sub_angles = nh_.subscribe ("/m1n6s200_driver/out/joint_state", 1, joint_state_cb);
+        sub_angles = nh_.subscribe ("/m1n6s200_driver/out/joint_state", 1,
+				    &GpdGraspActionServer::joint_state_cb, 
+				    this);
         
         //create subscriber to tool position topic
-        ros::Subscriber sub_tool = nh_.subscribe("/m1n6s200_driver/out/tool_pose", 1, toolpos_cb);
+        sub_tool = nh_.subscribe("/m1n6s200_driver/out/tool_pose", 1, &GpdGraspActionServer::toolpos_cb, this);
         
         //subscriber for fingers
-        ros::Subscriber sub_finger = nh_.subscribe("/m1n6s200_driver/out/finger_position", 1, fingers_cb);
+        sub_finger = nh_.subscribe("/m1n6s200_driver/out/finger_position", 1, &GpdGraspActionServer::fingers_cb, this);
         
         //subscriber for grasps
         //change to our topic
-        //ros::Subscriber sub_grasps = n.subscribe("/find_grasps/grasps_handles",1, grasps_cb);
-        ros::Subscriber sub_grasps = nh_.subscribe("/bwi_grasp/grasps", 1, grasps_cb);
+        //sub_grasps = n.subscribe("/find_grasps/grasps_handles",1, grasps_cb);
+        sub_grasps = nh_.subscribe("/bwi_grasp/grasps", 1, &GpdGraspActionServer::grasps_cb, this);
         
         //publish velocities
         pub_velocity = nh_.advertise<kinova_msgs::PoseVelocity>("/m1n6s200_driver/in/cartesian_velocity", 10);
@@ -214,8 +213,8 @@ public:
         cloud_pub = nh_.advertise<sensor_msgs::PointCloud2>("agile_grasp_demo/cloud_debug", 10);
         cloud_grasp_pub = nh_.advertise<sensor_msgs::PointCloud2>("agile_grasp_demo/cloud", 10);
         
-        ROS_INFO("Starting gpd grasp action server...")
-        as_.start()
+        ROS_INFO("Starting gpd grasp action server...");
+        as_.start();
     }
     
     ~GpdGraspActionServer(void) {}
@@ -589,10 +588,10 @@ public:
         segbot_arm_manipulation::moveToPoseMoveIt(n,p_target);
     }
 
-    void executeCB() {
+    void executeCB(const bwi_grasp::GpdGraspGoalConstPtr &goal) {
         std::string joint_state_topic = "/m1n6s200_driver/out/joint_state";
         while (true) {
-            boost::shared_ptr<const sensor_msgs::JointState> result = ros::topic::waitForMessage<sensor_msgs::JointState>(joint_state_topic, n, ros::Duration(5.0));
+            boost::shared_ptr<const sensor_msgs::JointState> result = ros::topic::waitForMessage<sensor_msgs::JointState>(joint_state_topic, nh_, ros::Duration(5.0));
             if (result) {
                 break;
             }
@@ -696,10 +695,10 @@ public:
                 listener.transformPose("m1n6s200_link_base", gc_i.grasp_pose, gc_i.grasp_pose);
                 
                 //filter two -- if IK fails
-                moveit_msgs::GetPositionIK::Response  ik_response_approach = computeIK(n,gc_i.approach_pose);
+                moveit_msgs::GetPositionIK::Response  ik_response_approach = computeIK(nh_, gc_i.approach_pose);
                 if (ik_response_approach.error_code.val == 1){
                     ROS_INFO_STREAM("Got past second check");
-                    moveit_msgs::GetPositionIK::Response  ik_response_grasp = computeIK(n,gc_i.grasp_pose);
+                    moveit_msgs::GetPositionIK::Response  ik_response_grasp = computeIK(nh_, gc_i.grasp_pose);
                     
                     if (ik_response_grasp.error_code.val == 1){
                         ROS_INFO_STREAM("Got past third check");
@@ -788,16 +787,16 @@ public:
         //set obstacle avoidance
         /*std::vector<sensor_msgs::PointCloud2> obstacle_clouds;
          obstacle_clouds.push_back(cloud_ros);
-         segbot_arm_manipulation::setArmObstacles(n,obstacle_clouds);*/
+         segbot_arm_manipulation::setArmObstacles(nh_,obstacle_clouds);*/
         
-        segbot_arm_manipulation::moveToPoseMoveIt(n,grasp_commands.at(max_score_index).approach_pose);
+        segbot_arm_manipulation::moveToPoseMoveIt(nh_, grasp_commands.at(max_score_index).approach_pose);
         
         //clear obstacles for final approach
         /*obstacle_clouds.clear();
          obstacle_clouds.push_back(table_scene.cloud_plane);
-         segbot_arm_manipulation::setArmObstacles(n,obstacle_clouds);*/
+         segbot_arm_manipulation::setArmObstacles(nh_,obstacle_clouds);*/
         
-        segbot_arm_manipulation::moveToPoseMoveIt(n,grasp_commands.at(max_score_index).approach_pose);
+        segbot_arm_manipulation::moveToPoseMoveIt(nh_, grasp_commands.at(max_score_index).approach_pose);
         
         //pressEnter();
         
@@ -810,7 +809,7 @@ public:
         /*std::cout << "Press '1' to move to approach pose or Ctrl-z to quit..." << std::endl;		
          std::cin >> in;*/
         
-        segbot_arm_manipulation::moveToPoseMoveIt(n,grasp_commands.at(max_score_index).grasp_pose);
+        segbot_arm_manipulation::moveToPoseMoveIt(nh_, grasp_commands.at(max_score_index).grasp_pose);
         spinSleep(3.0);
         
         //listenForArmData(30.0);
@@ -834,13 +833,13 @@ public:
         
         //TODO actually give velocity commands instead of calling lift
         
-        //moveToPoseMoveIt(n,pose_outofview);
-        //moveToPoseMoveIt(n,pose_outofview);
+        //moveToPoseMoveIt(nh_,pose_outofview);
+        //moveToPoseMoveIt(nh_,pose_outofview);
         
         segbot_arm_manipulation::homeArm(nh_);
         
-        segbot_arm_manipulation::moveToJointState(n,joint_state_outofview);
-        segbot_arm_manipulation::moveToJointState(n,joint_state_outofview);
+        segbot_arm_manipulation::moveToJointState(nh_,joint_state_outofview);
+        segbot_arm_manipulation::moveToJointState(nh_,joint_state_outofview);
         
         //moveToJointState(home_position_approach);
         //moveToJointState(home_position);
@@ -849,8 +848,16 @@ public:
     }
 };
 
+/* what happens when ctr-c is pressed */
+void sig_handler(int sig) {
+    g_caught_sigint = true;
+    ROS_INFO("caught sigint, init shutdown sequence...");
+    ros::shutdown();
+    exit(1);
+};
+
 int main(int argc, char** argv) {
-    ros::init(argc, argv, "gpd_grasp_as")
+    ros::init(argc, argv, "gpd_grasp_as");
     
     //register ctrl-c
     signal(SIGINT, sig_handler);
@@ -861,10 +868,3 @@ int main(int argc, char** argv) {
     return 0;
 }
 
-/* what happens when ctr-c is pressed */
-void sig_handler(int sig) {
-    g_caught_sigint = true;
-    ROS_INFO("caught sigint, init shutdown sequence...");
-    ros::shutdown();
-    exit(1);
-};

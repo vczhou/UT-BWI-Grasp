@@ -96,6 +96,7 @@ add_definitions(
    DEPENDENCIES
    std_msgs
    geometry_msgs
+   actionlib_msgs
   )
 
 ################################################
@@ -159,7 +160,7 @@ add_executable(convert_grasp src/convert_grasp.cpp)
 add_dependencies(convert_grasp ${catkin_EXPORTED_TARGETS})
 target_link_libraries(convert_grasp ${catkin_LIBRARIES})
 
-add_executable(bwi_grasp_node src/bwi_grasp_gpd.cpp)
+add_executable(bwi_grasp_node src/bwi_grasp_node.cpp)
 add_dependencies(bwi_grasp_node ${catkin_EXPORTED_TARGETS})
 target_link_libraries(bwi_grasp_node ${catkin_LIBRARIES})
 
