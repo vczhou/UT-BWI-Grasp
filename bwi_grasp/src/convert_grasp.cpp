@@ -22,7 +22,7 @@ void grasp_cb(const gpd::GraspConfigList::ConstPtr& gpd_grasps) {
         grasps.grasps[i].center.x = (gpd_grasps->grasps[i].top.x+gpd_grasps->grasps[i].bottom.x)/2;
         grasps.grasps[i].center.y = (gpd_grasps->grasps[i].top.y+gpd_grasps->grasps[i].bottom.y)/2;
         grasps.grasps[i].center.z = (gpd_grasps->grasps[i].top.z+gpd_grasps->grasps[i].bottom.z)/2;
-	grasps.grasps[i].score = gpd_grasps->grasps[i].score;
+        grasps.grasps[i].score = gpd_grasps->grasps[i].score;
     }
     ROS_INFO_STREAM("Found " << i << " grasps");
     grasp_pub.publish(grasps);

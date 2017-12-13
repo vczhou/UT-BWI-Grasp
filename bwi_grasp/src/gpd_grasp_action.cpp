@@ -183,33 +183,33 @@ public:
         heardJoinstState = false;
         heardGrasps = false;
         
-        //create subscriber to joint angles
+        // create subscriber to joint angles
         sub_angles = nh_.subscribe ("/m1n6s200_driver/out/joint_state", 1,
-				    &GpdGraspActionServer::joint_state_cb, 
-				    this);
+                                    &GpdGraspActionServer::joint_state_cb, this);
         
-        //create subscriber to tool position topic
-        sub_tool = nh_.subscribe("/m1n6s200_driver/out/tool_pose", 1, &GpdGraspActionServer::toolpos_cb, this);
+        // create subscriber to tool position topic
+        sub_tool = nh_.subscribe("/m1n6s200_driver/out/tool_pose", 1,
+                                 &GpdGraspActionServer::toolpos_cb, this);
         
-        //subscriber for fingers
-        sub_finger = nh_.subscribe("/m1n6s200_driver/out/finger_position", 1, &GpdGraspActionServer::fingers_cb, this);
+        // subscriber for fingers
+        sub_finger = nh_.subscribe("/m1n6s200_driver/out/finger_position", 1,
+                                   &GpdGraspActionServer::fingers_cb, this);
         
-        //subscriber for grasps
-        //change to our topic
-        //sub_grasps = n.subscribe("/find_grasps/grasps_handles",1, grasps_cb);
-        sub_grasps = nh_.subscribe("/bwi_grasp/grasps", 1, &GpdGraspActionServer::grasps_cb, this);
+        // subscriber for grasps
+        sub_grasps = nh_.subscribe("/bwi_grasp/grasps", 1,
+                                   &GpdGraspActionServer::grasps_cb, this);
         
-        //publish velocities
+        // publish velocities
         pub_velocity = nh_.advertise<kinova_msgs::PoseVelocity>("/m1n6s200_driver/in/cartesian_velocity", 10);
         
-        //publish pose array
+        // publish pose array
         pose_array_pub = nh_.advertise<geometry_msgs::PoseArray>("/agile_grasp_demo/pose_array", 10);
         
-        //publish pose
+        // publish pose
         pose_pub = nh_.advertise<geometry_msgs::PoseStamped>("/agile_grasp_demo/pose_out", 10);
         pose_fk_pub = nh_.advertise<geometry_msgs::PoseStamped>("/agile_grasp_demo/pose_fk_out", 10);
         
-        //debugging publisher
+        // debugging publisher
         cloud_pub = nh_.advertise<sensor_msgs::PointCloud2>("agile_grasp_demo/cloud_debug", 10);
         cloud_grasp_pub = nh_.advertise<sensor_msgs::PointCloud2>("agile_grasp_demo/cloud", 10);
         
@@ -228,19 +228,16 @@ public:
     
     // Joint state cb
     void joint_state_cb (const sensor_msgs::JointStateConstPtr& input) {
-        
         if (input->position.size() == NUM_JOINTS){
             current_state = *input;
             heardJoinstState = true;
         }
-        //ROS_INFO_STREAM(current_state);
     }
     
     // Tool position cb
     void toolpos_cb (const geometry_msgs::PoseStamped &msg) {
         current_pose = msg;
         heardPose = true;
-        //  ROS_INFO_STREAM(current_pose);
     }
     
     // Finger state cb
@@ -300,11 +297,10 @@ public:
         int max_num_points = -1;
         int index = -1;
         
-        for (unsigned int i = 0; i < candidates.size(); i ++){
-            if ((int)candidates.at(i)->points.size() > max_num_points){
+        for (unsigned int i = 0; i < candidates.size(); i ++) {
+            if ((int)candidates.at(i)->points.size() > max_num_points) {
                 max_num_points = (int)candidates.at(i)->points.size();
                 index = (int)i;
-                
             }
         }
         
@@ -476,7 +472,6 @@ public:
         moveit_msgs::GetPositionFK::Request fkine_request;
         moveit_msgs::GetPositionFK::Response fkine_response;
         
-        
         //wait to get lates joint state values
         listenForArmData(30.0);
         sensor_msgs::JointState q_true = current_state;
@@ -523,14 +518,13 @@ public:
             velocityMsg.twist_angular_y = 0.0;
             velocityMsg.twist_angular_z = 0.0;
             
-            
             pub_velocity.publish(velocityMsg);
             ROS_INFO("Published cartesian vel. command");
             r.sleep();
         }
     }
     
-    //lifts ef specified distance
+    // Lifts ef specified distance
     void lift_velocity(double vel, double distance){
         double pubRate = 40.0;
         ros::Rate r(pubRate);
@@ -598,31 +592,24 @@ public:
             ROS_WARN("Could not read joint states, retrying...");
         }
         
-        // user input
-        char in;
-        
         ROS_INFO("Demo starting...move the arm to a position where it is not occluding the table.");
         //TODO This is where we have to change the file
         pressEnter();
         
-        ROS_INFO("Got user input");
-        
-        //store out of table joint position
+        // Store out of table joint position
         listenForArmData(30.0);
         joint_state_outofview = current_state;
         pose_outofview = current_pose;
         
-        ROS_INFO("Stored current joint position");
-        
         segbot_arm_manipulation::openHand();
         
-        // gpd will do its own picking up which object to pick up using RGBD image data
+        // Gpd will do its own picking up which object to pick up using RGBD image data
         
         ROS_INFO("Getting tabletop scene...");
         
         segbot_arm_perception::TabletopPerception::Response table_scene = segbot_arm_manipulation::getTabletopScene(nh_);
         
-        ROS_INFO("calculated tabletop scene");
+        ROS_INFO("Calculated tabletop scene");
         //step 2: extract the data from the response
         /*detected_objects.clear();
          for (unsigned int i = 0; i < table_scene.cloud_clusters.size(); i++){
@@ -663,7 +650,7 @@ public:
         poses_msg.header.stamp = cloud_ros.header.stamp;
         poses_msg.header.frame_id = "m1n6s200_link_base";
         
-        ROS_INFO("[agile_grasp_demo.cpp] Heard %i grasps",(int)current_grasps.grasps.size());
+        ROS_INFO("[gpd_grasp_action.cpp] Heard %i grasps", (int)current_grasps.grasps.size());
         
         //next, compute approach and grasp poses for each detected grasp
         double hand_offset_grasp = -0.02;
@@ -735,7 +722,7 @@ public:
         
         //make sure we're working with the correct tool pose
         listenForArmData(30.0);
-        ROS_INFO("[agile_grasp_demo.cpp] Heard arm pose.");
+        ROS_INFO("[gpd_grasp_action.cpp] Heard arm pose.");
         
         //now, select the target grasp
         updateFK(nh_);
