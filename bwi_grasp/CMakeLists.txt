@@ -168,6 +168,10 @@ add_executable(gpd_grasp_action src/gpd_grasp_action.cpp)
 add_dependencies(gpd_grasp_action ${catkin_EXPORTED_TARGETS})
 target_link_libraries(gpd_grasp_action ${catkin_LIBRARIES})
 
+add_executable(test_gpd_grasp_action src/test_gpd_grasp_action.cpp)
+add_dependencies(test_gpd_grasp_action ${catkin_EXPORTED_TARGETS})
+target_link_libraries(test_gpd_grasp_action ${catkin_LIBRARIES})
+
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
 #   src/${PROJECT_NAME}/bwi_grasp.cpp
