@@ -2,12 +2,13 @@
 
 #include <signal.h>
 
-//action for grasping
+// Action for grasping
 #include "bwi_grasp/GpdGraspAction.h"
 
+#include <actionlib/client/simple_action_client.h>
 #include <segbot_arm_manipulation/arm_utils.h>
 
-//true if Ctrl-C is pressed
+// True if Ctrl-C is pressed
 bool g_caught_sigint=false;
 
 /* what happens when ctr-c is pressed */
@@ -40,22 +41,24 @@ int main(int argc, char **argv) {
     ros::init(argc, argv, "demo_grasp_action_client");
     ros::NodeHandle n;
     
-    //register ctrl-c
+    // Register ctrl-c
     signal(SIGINT, sig_handler);
     
-    pressEnter("Demo starting.");
+    pressEnter("Demo starting...");
     
-    actionlib::SimpleActionClient<bwi_grasp::GpdGraspAction> ac("gpd_grasp_as",true);
+    actionlib::SimpleActionClient<bwi_grasp::GpdGraspAction> ac("gpd_grasp_as", true);
+    ROS_INFO("Waiting for server...");
     ac.waitForServer();
+
+    ROS_INFO("Gpd grasp action server started...");
     
+    bwi_grasp::GpdGraspGoal grasp_goal;
+    grasp_goal.command = "grasp";
     
-    segbot_arm_manipulation::TabletopApproachGoal approach_goal;
-    approach_goal.command = "grasp";
-    
-    //send the goal
+    // Send the goal
     ROS_INFO("Sending goal to grasp object...");
-    ac.sendGoal(approach_goal);
+    ac.sendGoal(grasp_goal);
     
-    //block until the action is completed
+    // Block until the action is completed
     ac.waitForResult();
 }

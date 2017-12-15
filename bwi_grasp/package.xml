@@ -24,7 +24,9 @@
  
   <run_depend>roscpp</run_depend>
   <run_depend>rospy</run_depend>
-  <run_depend>message_runtime</run_depend> 
+  <run_depend>message_runtime</run_depend>
+  <run_depend>message_generation</run_depend>
+  <run_depend>actionlib_msgs</run_depend> 
   <run_depend>std_msgs</run_depend>
   <run_depend>kinova_msgs</run_depend>
   <run_depend>segbot_arm_perception</run_depend>

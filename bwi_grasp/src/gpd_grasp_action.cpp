@@ -178,7 +178,6 @@ public:
     GpdGraspActionServer(std::string name) :
     as_(nh_, name, boost::bind(&GpdGraspActionServer::executeCB, this, _1), false),
     action_name_(name) {
-        
         heardPose = false;
         heardJoinstState = false;
         heardGrasps = false;
@@ -203,15 +202,15 @@ public:
         pub_velocity = nh_.advertise<kinova_msgs::PoseVelocity>("/m1n6s200_driver/in/cartesian_velocity", 10);
         
         // publish pose array
-        pose_array_pub = nh_.advertise<geometry_msgs::PoseArray>("/agile_grasp_demo/pose_array", 10);
+        pose_array_pub = nh_.advertise<geometry_msgs::PoseArray>("/gpd_grasp_as/pose_array", 10);
         
         // publish pose
-        pose_pub = nh_.advertise<geometry_msgs::PoseStamped>("/agile_grasp_demo/pose_out", 10);
-        pose_fk_pub = nh_.advertise<geometry_msgs::PoseStamped>("/agile_grasp_demo/pose_fk_out", 10);
+        pose_pub = nh_.advertise<geometry_msgs::PoseStamped>("/gpd_grasp_as/pose_out", 10);
+        pose_fk_pub = nh_.advertise<geometry_msgs::PoseStamped>("/gpd_grasp_as/pose_fk_out", 10);
         
         // debugging publisher
-        cloud_pub = nh_.advertise<sensor_msgs::PointCloud2>("agile_grasp_demo/cloud_debug", 10);
-        cloud_grasp_pub = nh_.advertise<sensor_msgs::PointCloud2>("agile_grasp_demo/cloud", 10);
+        cloud_pub = nh_.advertise<sensor_msgs::PointCloud2>("gpd_grasp_as/cloud_debug", 10);
+        cloud_grasp_pub = nh_.advertise<sensor_msgs::PointCloud2>("gpd_grasp_as/cloud", 10);
         
         ROS_INFO("Starting gpd grasp action server...");
         as_.start();
@@ -285,7 +284,7 @@ public:
         dv[0] = d.w; dv[1] = d.x; dv[2] = d.y; dv[3] = d.z;
         Eigen::Matrix<float, 3,4> inv;
         inv(0,0) = -c.x; inv(0,1) = c.w; inv(0,2) = -c.z; inv(0,3) = c.y;
-        inv(1,0) = -c.y; inv(1,1) = c.z; inv(1,2) = c.w;	inv(1,3) = -c.x;
+        inv(1,0) = -c.y; inv(1,1) = c.z; inv(1,2) = c.w;  inv(1,3) = -c.x;
         inv(2,0) = -c.z; inv(2,1) = -c.y;inv(2,2) = c.x;  inv(2,3) = c.w;
         
         Eigen::Vector3f m = inv * dv * -2.0;
@@ -583,6 +582,8 @@ public:
     }
 
     void executeCB(const bwi_grasp::GpdGraspGoalConstPtr &goal) {
+	ROS_INFO("In execute callback");
+
         std::string joint_state_topic = "/m1n6s200_driver/out/joint_state";
         while (true) {
             boost::shared_ptr<const sensor_msgs::JointState> result = ros::topic::waitForMessage<sensor_msgs::JointState>(joint_state_topic, nh_, ros::Duration(5.0));
@@ -621,7 +622,7 @@ public:
          }
          
          if (detected_objects.size() == 0){
-         ROS_WARN("[agile_grasp_demo.cpp] No objects detected...aborting.");
+         ROS_WARN("[gpd_grasp_action.cpp] No objects detected...aborting.");
          return 1;
          }*/
         
@@ -847,7 +848,7 @@ int main(int argc, char** argv) {
     ros::init(argc, argv, "gpd_grasp_as");
     
     //register ctrl-c
-    signal(SIGINT, sig_handler);
+    //signal(SIGINT, sig_handler);
     
     GpdGraspActionServer as(ros::this_node::getName());
     ros::spin();

@@ -92,12 +92,12 @@ add_definitions(
  )
 
 ## Generate added messages and services with any dependencies listed here
-   generate_messages(
+ generate_messages(
    DEPENDENCIES
    std_msgs
    geometry_msgs
    actionlib_msgs
-  )
+ )
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -140,8 +140,11 @@ catkin_package(
 #    roscpp
 #    std_msgs
 #    eigen_conversions
-DEPENDS 
-    segbot_arm_perception 
+DEPENDS
+    message_runtime
+    segbot_arm_perception
+    actionlib_msgs
+    std_msgs 
 #    PCL
 #    Eigen
 )
@@ -165,11 +168,11 @@ add_dependencies(bwi_grasp_node ${catkin_EXPORTED_TARGETS})
 target_link_libraries(bwi_grasp_node ${catkin_LIBRARIES})
 
 add_executable(gpd_grasp_action src/gpd_grasp_action.cpp)
-add_dependencies(gpd_grasp_action ${catkin_EXPORTED_TARGETS})
+add_dependencies(gpd_grasp_action bwi_grasp_gencpp ${catkin_EXPORTED_TARGETS})
 target_link_libraries(gpd_grasp_action ${catkin_LIBRARIES})
 
 add_executable(test_gpd_grasp_action src/test_gpd_grasp_action.cpp)
-add_dependencies(test_gpd_grasp_action ${catkin_EXPORTED_TARGETS})
+add_dependencies(test_gpd_grasp_action bwi_grasp_gencpp ${catkin_EXPORTED_TARGETS})
 target_link_libraries(test_gpd_grasp_action ${catkin_LIBRARIES})
 
 ## Declare a C++ library
