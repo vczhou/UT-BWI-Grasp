@@ -16,6 +16,7 @@ find_package(catkin REQUIRED COMPONENTS
     message_generation
     kinova_msgs
     actionlib
+    actionlib_msgs
     pcl_ros
     pcl_conversions
     tf_conversions
@@ -31,6 +32,7 @@ find_package(PCL 1.7 REQUIRED)
 
 include_directories(
     ${PCL_INCLUDE_DIRS}
+    ${Boost_INCLUDE_DIRS}
 )
 
 link_directories(
@@ -89,6 +91,7 @@ add_definitions(
  add_action_files(
    FILES
    GpdGrasp.action
+   Fib.action
  )
 
 ## Generate added messages and services with any dependencies listed here
@@ -174,6 +177,14 @@ target_link_libraries(gpd_grasp_action ${catkin_LIBRARIES})
 add_executable(test_gpd_grasp_action src/test_gpd_grasp_action.cpp)
 add_dependencies(test_gpd_grasp_action bwi_grasp_gencpp ${catkin_EXPORTED_TARGETS})
 target_link_libraries(test_gpd_grasp_action ${catkin_LIBRARIES})
+
+add_executable(fib_server src/fib_server.cpp)
+add_dependencies(fib_server ${catkin_EXPORTED_TARGETS})
+target_link_libraries(fib_server ${catkin_LIBRARIES})
+
+add_executable(fib_client src/fib_client.cpp)
+add_dependencies(fib_client ${catkin_EXPORTED_TARGETS})
+target_link_libraries(fib_client ${catkin_LIBRARIES})
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}

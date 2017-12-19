@@ -847,8 +847,8 @@ void sig_handler(int sig) {
 int main(int argc, char** argv) {
     ros::init(argc, argv, "gpd_grasp_as");
     
-    //register ctrl-c
-    //signal(SIGINT, sig_handler);
+    // register ctrl-c
+    signal(SIGINT, sig_handler);
     
     GpdGraspActionServer as(ros::this_node::getName());
     ros::spin();

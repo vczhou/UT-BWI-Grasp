@@ -1,9 +1,9 @@
-# Goal
+# goal definition
 string command
 ---
-# Result
+# result definition
 bool success
 string error_msg
 ---
-# Feedback
+# feedback definition
 bool status
